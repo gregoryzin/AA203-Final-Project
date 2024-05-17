@@ -39,12 +39,10 @@ def linearize(f, s, u):
     """
     # WRITE YOUR CODE BELOW ###################################################
     # INSTRUCTIONS: Use JAX to compute `A` and `B` in one line.
+    A,B = jax.jacobian(f,argnums = (0,1))(s,u)
+
     # raise NotImplementedError()
     ###########################################################################
-
-    _, A = jax.jvp(lambda x: f(x,u), (s,), (jnp.ones(4),))
-    _, B = jax.jvp(lambda v: f(s,v), (u,), (jnp.ones(1),))
-
     return A, B
 
 
@@ -107,6 +105,15 @@ def ilqr(f, s0, s_goal, N, Q, R, QN, eps=1e-3, max_iters=1000):
     ds = np.zeros((N + 1, n))
     du = np.zeros((N, m))
 
+    # make copies of the nominal trajectory
+    s = np.zeros((N + 1, n))
+    s[0] = s0
+    u = np.zeros((N, m))
+
+    # print(s[0])
+    # print((s_bar[0].T @ Q - s_goal.T @ Q).T)
+    # print(Y[2] @ s_bar[0])
+
     # iLQR loop
     converged = False
     for _ in range(max_iters):
@@ -116,8 +123,73 @@ def ilqr(f, s0, s_goal, N, Q, R, QN, eps=1e-3, max_iters=1000):
 
         # PART (c) ############################################################
         # INSTRUCTIONS: Update `Y`, `y`, `ds`, `du`, `s_bar`, and `u_bar`.
-        raise NotImplementedError()
+        
+        # compute coefficients of linear cost terms
+        qk = np.zeros((N, n))
+        rk = np.zeros((N, m))
+
+        for i in range(N):
+            qk[i] = (s_bar[i].T @ Q - s_goal.T @ Q) #.T
+            rk[i] = (u_bar[i].T @ R) #.T
+
+        # linear coefficient
+        qN = (s_bar[-1,:].T @ QN - s_goal.T @ QN) #.T
+
+        # initialize value functions
+        V_prev = QN
+        vv_prev = qN
+        # v_prev = 0.5*s_bar[-1,:].T @ QN @ s_bar[-1,:] - s_goal.T @ QN @ s_bar[-1,:] + s_goal.T @ QN @ s_goal # cost to go
+
+        # do backward recursion following Algorithm 4 iLQR in the notes!
+        for k in np.flip(range(N)):
+
+            # partial derivative from expanded cost function
+            # ck = # cost of current point (?)
+            cx = qk[k]
+            cu = rk[k]
+            cxx = Q # quadratic penalty matrix on state (stagewise)
+            cuu = R # quadratic penalty matrix on control (stagewise)
+            cux = 0 # no coupling of state and control in cost function
+
+            # equations 3.48 to 3.53
+            # Qk = ck + v_prev
+            Qxk = cx + A[k].T @ vv_prev
+            Quk = cu + B[k].T @ vv_prev
+            Qxx = cxx + A[k].T @ V_prev @ A[k]
+            Quu = cuu + B[k].T @ V_prev @ B[k]
+            Qux = cux + B[k].T @ V_prev @ A[k]
+
+            y[k] = -1*np.linalg.inv(Quu) @ Quk # control offset
+            Y[k] = -1*np.linalg.inv(Quu) @ Qux # control gain matrix
+
+            # print(y[k])
+
+            # v_prev = Qk - 0.5*y.T @ Quu @ y  # ignore equation 3.57
+            vv_prev = Qxk - Y[k].T @ Quu @ y[k]
+            V_prev = Qxx - Y[k].T @ Quu @ Y[k]
+            
+
+        # perform forward pass with control policy rollout
+        for k in range(N):
+            # deviation variables
+            ds[k] = s[k] - s_bar[k] 
+            du[k] = y[k] + Y[k] @ ds[k]
+            
+            # new state and control history with discretized dynamics
+            u[k] = u_bar[k] + du[k]
+            s[k + 1] = f(s[k], u[k])
+            
+            
+        # store this trajectory as new nominal trajectory
+        s_bar = np.copy(s)
+        u_bar = np.copy(u) 
+        # ds = s - s_bar
+        # print(ds[-1])
+
+        # raise NotImplementedError()
         #######################################################################
+
+        # print(np.max(np.abs(du)))
 
         if np.max(np.abs(du)) < eps:
             converged = True
@@ -159,8 +231,8 @@ s0 = np.array([0.0, 0.0, 0.0, 0.0])  # initial state
 s_goal = np.array([0.0, np.pi, 0.0, 0.0])  # goal state
 T = 10.0  # simulation time
 dt = 0.1  # sampling time
-animate = False  # flag for animation
-closed_loop = False  # flag for closed-loop control
+animate = True  # flag for animation
+closed_loop = True  # flag for closed-loop control
 
 # Initialize continuous-time and discretized dynamics
 f = jax.jit(cartpole)
@@ -185,11 +257,11 @@ for k in range(N):
     # INSTRUCTIONS: Compute either the closed-loop or open-loop value of
     # `u[k]`, depending on the Boolean flag `closed_loop`.
     if closed_loop:
-        u[k] = 0.0
-        raise NotImplementedError()
+        u[k] = u_bar[k] + y[k] + Y[k] @ (s[k] - s_bar[k])
+        
     else:  # do open-loop control
-        u[k] = 0.0
-        raise NotImplementedError()
+        u[k] = u_bar[k]
+        
     ###########################################################################
     s[k + 1] = odeint(lambda s, t: f(s, u[k]), s[k], t[k : k + 2])[1]
 print("done! ({:.2f} s)".format(time.time() - start), flush=True)

@@ -13,12 +13,12 @@ from animations import animate_cartpole
 # Constants
 n = 4  # state dimension
 m = 1  # control dimension
-mp = 2.0  # pendulum mass
-mc = 10.0  # cart mass
+mp = 2.0  # pendulum mass, kg 
+mc = 10.0  # cart mass, kg
 L = 1.0  # pendulum length
 g = 9.81  # gravitational acceleration
 dt = 0.1  # discretization time step
-animate = False  # whether or not to animate results
+animate = True  # whether or not to animate results
 
 
 def cartpole(s: np.ndarray, u: np.ndarray) -> np.ndarray:
@@ -60,7 +60,24 @@ def reference(t: float) -> np.ndarray:
 
     # PART (d) ##################################################
     # INSTRUCTIONS: Compute the reference state for a given time
-    raise NotImplementedError()
+    # raise NotImplementedError()
+    
+    # intialize reference trajectory
+    s_ref = np.zeros((t.size,4))
+
+    # pendulum to be upright
+    theta_ref = np.pi
+    thetadot_ref = 0
+
+    # want sinusoidal motion in x
+    x_ref = a*np.sin(2*np.pi*t/T)
+    xdot_ref = a*(2*np.pi/T)*np.cos(2*np.pi*t/T)
+
+    # print(x_ref[0])
+    s_ref = [x_ref, theta_ref, xdot_ref, thetadot_ref]
+
+    return s_ref
+
     # END PART (d) ##############################################
 
 
@@ -82,11 +99,39 @@ def ricatti_recursion(
     max_iters = 1000  # Riccati recursion maximum number of iterations
     P_prev = np.zeros((n, n))  # initialization
     converged = False
+
+    # print(P_prev)
+
     for i in range(max_iters):
         # PART (b) ##################################################
         # INSTRUCTIONS: Apply the Ricatti equation until convergence
-        K = -(R + B.T @ P)
-        raise NotImplementedError()
+        
+        # print(R + B.T @ P_prev @ B)
+        # print(np.linalg.inv(R + B.T @ P_prev @ B))
+        # print(B.T @ P_prev @ A)
+        # print(Q.shape)
+
+        if R.shape == (1,1):
+            K = -1 * B.T @ P_prev @ A / (R + B.T @ P_prev @ B)
+        else:
+            K = -1 @ np.linalg.inv(R + B.T @ P_prev @ B) @ B.T @ P_prev @ A
+
+        # B is shape n,m (4,1)
+        # K is shape m,n (1,4)
+        # B * K will be shape n,n - need to implement correctly
+        # print(K.shape)
+        # print(B.reshape(n,m))
+        # print(Q + A.T @ P_prev @ (A + B.reshape(n,m) * K))
+
+        P = Q + A.T @ P_prev @ (A + B.reshape(n,m) * K)
+
+        if np.max(np.abs(P - P_prev)) < eps:
+            converged = True
+
+        # store P to P_prev
+        P_prev = P
+
+        # raise NotImplementedError()
         # END PART (b) ##############################################
     if not converged:
         raise RuntimeError("Ricatti recursion did not converge!")
@@ -119,9 +164,26 @@ def simulate(
     # PART (c) ##################################################
     # INSTRUCTIONS: Complete the function to simulate the cartpole system
     # Hint: use the cartpole wrapper above with odeint
-    s = NotImplemented
-    u = NotImplemented
-    raise NotImplementedError()
+
+    # initialize arrays
+    s = np.zeros(s_ref.shape)
+    u = np.zeros((t.size,1))
+
+    # print(s[0].shape)
+    # print(s0.shape)
+    print(s_ref[0])
+
+    # intial state 
+    s[0] = s0
+
+    for k in range(t.size - 1):
+        # control at index k
+        u[k] = K @ (s[k] - s_ref[k]) # + u_ref
+
+        # print(u[k])
+        # simulate nonlinear dynamics
+        s[k+1] = odeint(cartpole_wrapper, s[k], t[k:k+2], (u[k],))[1]
+
     # END PART (c) ##############################################
     return s, u
 
@@ -136,8 +198,19 @@ def compute_lti_matrices() -> tuple[np.ndarray, np.ndarray]:
     """
     # PART (a) ##################################################
     # INSTRUCTIONS: Construct the A and B matrices
-    A = NotImplemented
-    B = NotImplemented
+    # initialize states to linearize around
+    # A = eye(4) + jax.jacobian(lambda x: f(x,u))(s) 
+    # B = jax.jacobian(lambda v: f(x,v))(u) 
+    A = np.eye(4) + dt*np.array([[0,0,1,0],
+                                [0,0,0,1],
+                                [0,mp*g/mc,0,0],
+                                [0,(mp+mc)*g/(mc*L),0,0]])
+    
+    B = np.array([0, 0, 1/mc, 1/(mc*L)]) * dt
+
+    print(A)
+    print(B)
+
     # END PART (a) ##############################################
     return A, B
 
@@ -154,7 +227,7 @@ def plot_state_and_control_history(
         s_ref (np.ndarray): Reference state s_bar, evaluated at each time t. Shape (num_timesteps, n)
         name (str): Filename prefix for saving figures
     """
-    fig, axes = plt.subplots(1, n + m, dpi=150, figsize=(15, 2))
+    fig, axes = plt.subplots(n+m, 1, dpi=150, figsize=(2,15))
     plt.subplots_adjust(wspace=0.35)
     labels_s = (r"$x(t)$", r"$\theta(t)$", r"$\dot{x}(t)$", r"$\dot{\theta}(t)$")
     labels_u = (r"$u(t)$",)
@@ -168,12 +241,12 @@ def plot_state_and_control_history(
         axes[n + i].set_xlabel(r"$t$")
         axes[n + i].set_ylabel(labels_u[i])
     plt.savefig(f"{name}.png", bbox_inches="tight")
-    plt.show()
+    # plt.show()
 
     if animate:
         fig, ani = animate_cartpole(t, s[:, 0], s[:, 1])
         ani.save(f"{name}.mp4", writer="ffmpeg")
-        plt.show()
+        # plt.show()
 
 
 def main():
@@ -197,6 +270,7 @@ def main():
     # Note: t, u_ref unchanged from part c
     s_ref = np.array([reference(ti) for ti in t])
     s0 = np.array([0.0, np.pi, 0.0, 0.0])
+    # s0 = np.array([0.0, 3 * np.pi / 4, 0.0, 0.0])
     s, u = simulate(t, s_ref, u_ref, s0, K)
     plot_state_and_control_history(s, u, t, s_ref, "cartpole_balance_tv")
 

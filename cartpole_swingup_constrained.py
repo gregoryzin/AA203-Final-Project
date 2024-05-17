@@ -48,25 +48,10 @@ def affinize(f, s, u):
     # PART (b) ################################################################
     # INSTRUCTIONS: Use JAX to affinize `f` around `(s, u)` in two lines.
     # raise NotImplementedError()
-
-    A = jax.jacobian(lambda x: f(x,u))(s)
-    B = jax.jacobian(lambda v: f(s,v))(u)
-    c = f(s,u) - A @ s - B @ u 
-
-    # _, A = jax.jvp(lambda x: f(x,u), (s,), (jnp.ones(4),))
-    # c, B = jax.jvp(lambda v: f(s,v), (u,), (jnp.ones(1),))
-
-    # follow style in recitation #1
-    # def taylor(x̄, ū, Δx, Δu):
-    #     c, AΔx = jax.jvp(lambda x: f(x,ū), (x̄,), (Δx,))
-    #     _, BΔu = jax.jvp(lambda u: f(x̄,u), (ū,), (Δu,))
-    #     return AΔx, BΔu, c
-    
-    # vectorize once to compute linearization of 1 trajectory over T timesteps
-    # taylor = jax.vmap(taylor)
-    # taylor = jax.vmap(taylor)
-
-    # A, B, c = taylor(s,u,jnp.ones(4),jnp.ones(1))
+    A,B = jax.jacrev(f,argnums = (0,1))(s,u)
+    # A = jax.jacobian(lambda x: f(x,u))(s) 
+    # B = jax.jacobian(lambda v: f(s,v))(u) 
+    c = f(s,u) - A @ s - B @ u  
     # END PART (b) ############################################################
     return A, B, c
 
@@ -116,7 +101,7 @@ def solve_swingup_scp(f, s0, s_goal, N, P, Q, R, u_max, ρ, eps, max_iters):
     m = R.shape[0]  # control dimension
 
     # Initialize dynamically feasible nominal trajectories
-    u = np.ones((N, m))
+    u = np.zeros((N, m))
     s = np.zeros((N + 1, n))
     s[0] = s0
     for k in range(N):
@@ -180,17 +165,8 @@ def scp_iteration(f, s0, s_goal, s_prev, u_prev, N, P, Q, R, u_max, ρ):
     J : float
         The SCP sub-problem cost.
     """
-    # print(s_prev[:-1].shape)
-    # print(u_prev.shape)
     A, B, c = affinize(f, s_prev[:-1], u_prev)
     A, B, c = np.array(A), np.array(B), np.array(c)
-
-    # print(A[1].shape)
-    # print(B.shape)
-    # print(c.shape)
-    # print(s_prev[:,2].shape)
-    # print(s_goal.shape)
-
     n = Q.shape[0]
     m = R.shape[0]
     s_cvx = cvx.Variable((N + 1, n))
@@ -198,30 +174,25 @@ def scp_iteration(f, s0, s_goal, s_prev, u_prev, N, P, Q, R, u_max, ρ):
 
     # PART (c) ################################################################
     # INSTRUCTIONS: Construct the convex SCP sub-problem.
-    # objective = cvx.quad_form(s_cvx[N] - s_goal,P)     # terminal cost (s - s_goal).T @ P @ (s - s_goal)
-    # for i in range(N):
-        # objective += cvx.quad_form(s_cvx[i] - s_goal,Q) # running cost of state: (s - s_goal).T @ Q @ (s - s_goal)
-
-    # objective += cvx.sum(R * cvx.square(u_cvx)) # running cost of control: u.T @ R @ u
-    # objective += slack
-    objective = (cvx.quad_form(s_cvx[N,:] - s_goal,P) + R * cvx.sum(cvx.square(u_cvx)) + 
-                cvx.sum([cvx.quad_form(s_cvx[i] - s_goal,Q) for i in range(N-1)]))
-
-    # constraints = [s_cvx[i+1] == c[i] + A[i] @ (s_cvx[i] - s_prev[i]) + B[i] * (u_cvx[i] - u_prev[i])  for i in range(N-1)] # dynamics constraint
-    constraints = [s_cvx[i+1] == c[i] + A[i] @ s_cvx[i] + B[i] @ u_cvx[i]  for i in range(N-1)] # dynamics constraint
-    # constraints = [s_cvx[i+1] == s_cvx[i] + c[i] + A[i] @ s_cvx[i] + B[i] * u_cvx[i]  for i in range(N)] # dynamics constraint
-    constraints += [s_cvx[0] == s0] # , s_cvx[N] == s_goal] # initial/terminal constraints
-    constraints += [cvx.abs(u_cvx) <= u_max] # control constraint
-
-    # trust region constraints
-    constraints += [cvx.norm_inf(s_cvx[i] - s_prev[i]) <= ρ for i in range(N)] 
-    constraints += [cvx.norm_inf(u_cvx[i] - u_prev[i]) <= ρ for i in range(N-1)]
+    # objective = (cvx.quad_form(s_cvx[N,:] - s_goal,P) + R * cvx.sum(cvx.square(u_cvx)) +  
+    #            cvx.sum([cvx.quad_form(s_cvx[i] - s_goal,Q) for i in range(N-1)])) 
+    objective = (cvx.quad_form(s_cvx[N,:] - s_goal,P) +
+                 cvx.sum([cvx.quad_form(u_cvx[i],R) for i in range(N)]) +
+                cvx.sum([cvx.quad_form(s_cvx[i] - s_goal,Q) for i in range(N-1)])) 
     
+    constraints = [s_cvx[i+1] == c[i] + A[i] @ s_cvx[i] + B[i] @ u_cvx[i] for i in range(N)] # dynamics constraint 
+    constraints += [s_cvx[0] == s0] # initial/terminal constraints 
+    constraints += [cvx.abs(u_cvx) <= u_max] # control constraint 
+    
+    # trust region constraints
+    constraints += [cvx.norm_inf(s_cvx[i] - s_prev[i]) <= ρ for i in range(N)]  
+    constraints += [cvx.norm_inf(u_cvx[i] - u_prev[i]) <= ρ for i in range(N)]
+
     # raise NotImplementedError()
     # END PART (c) ############################################################
 
     prob = cvx.Problem(cvx.Minimize(objective), constraints)
-    prob.solve() # solver = cvx.ECOS, verbose = True)
+    prob.solve()
     if prob.status != "optimal":
         raise RuntimeError("SCP solve failed. Problem status: " + prob.status)
     s = s_cvx.value
@@ -277,7 +248,7 @@ Q = np.diag([1e-2, 1.0, 1e-3, 1e-3])  # state cost matrix
 R = 1e-3 * np.eye(m)  # control cost matrix
 ρ = 1.0  # trust region parameter
 u_max = 8.0  # control effort bound
-eps = 5e-4  # convergence tolerance
+eps = 5e-1  # convergence tolerance
 max_iters = 100  # maximum number of SCP iterations
 animate = True  # flag for animation
 
@@ -294,7 +265,7 @@ for k in range(N):
     s[k + 1] = fd(s[k], u[k])
 
 # Plot state and control trajectories
-fig, ax = plt.subplots(1, n + m, dpi=150, figsize=(15, 2))
+fig, ax = plt.subplots(n+m, 1, dpi=150, figsize=(2, 15))
 plt.subplots_adjust(wspace=0.45)
 labels_s = (r"$x(t)$", r"$\theta(t)$", r"$\dot{x}(t)$", r"$\dot{\theta}(t)$")
 labels_u = (r"$u(t)$",)
@@ -322,5 +293,5 @@ plt.show()
 # Animate the solution
 if animate:
     fig, ani = animate_cartpole(t, s[:, 0], s[:, 1])
-    ani.save('cartpole_swingup_constrained.gif', writer='ffmpeg')
+    ani.save("cartpole_swingup_constrained.gif", writer="ffmpeg")
     plt.show()
