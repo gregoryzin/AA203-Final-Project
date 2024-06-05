@@ -6,7 +6,7 @@ Autonomous Systems Lab (ASL), Stanford University
 
 import time
 
-# from animations import animate_cartpole
+# from helper import ...
 
 import jax
 import jax.numpy as jnp
@@ -220,72 +220,16 @@ def cartpole(s, u):
     )
     return ds
 
-def CR3BP_SRP(s,u):
-    """Compute the state derivative in the CR3BP."""
-    # Sun-Earth CR3BP constants
-    # gravitational parameter [km^3 s^-2]
-    mu_E = 398600.435507 # Earth
-    mu_S = 1.32712440041279419e11 # Sun
-    mu = mu_E/(mu_E + mu_S) 
 
-    # position of Sun in CR3BP
-    r_Sun = np.array([-mu, 0, 0])
-
-    LU = 1.49598e8 # km
-    TU = np.sqrt(LU**3/(mu_E + mu_S)) # seconds
-
-    # spacecraft sail model (single plate)
-    m = 39000 # kg
-    A = 345 # m^2
-    R_diff = 1 
-    R_spec = 1
-
-    # extract states
-    x, y, z, vx, vy, vz = s
-    α, β = u
-    sinα, cosα, sinβ, cosβ = jnp.sin(α), jnp.cos(α), jnp.sin(β), jnp.cos(β)
-
-    # flat plate unit normal vector
-    n_B = np.array([cosα*cosβ, sinα*cosβ, sinβ])
-
-    # cosine of angle between r_s and n_B
-    cosθ = 
-
-    
-
-
-
-
-
-
-def SRP(r):
-    # This function computes the solar radiation pressure at given distance r 
-    # from the Sun.
-    # Input:
-    #   r - distance from the Sun in km
-    # Output:
-    #   P - solar pressure in Pascals (N/m^2)
-    
-    # constants
-    L = 3.828e26 # luminosity of the Sun [W]
-    c = 299792458 # speed of light [m/s]
-
-    # solar flux [W/m^2]
-    F = L/(4*np.pi*(1000*r)^2)
-
-    # solar pressure [N/m^2]
-    P = F/c
-
-    return P
 
 # Define constants
-n = 6  # state dimension
+n = 7  # state dimension
 m = 2  # control dimension
 Q = np.diag(np.array([10.0, 10.0, 2.0, 2.0]))  # state cost matrix
 R = 1e-2 * np.eye(m)  # control cost matrix
 QN = 1e2 * np.eye(n)  # terminal state cost matrix
-s0 = np.array([0.0, 0.0, 0.0, 0.0])  # initial state
-s_goal = np.array([0.0, np.pi, 0.0, 0.0])  # goal state
+s0 = np.array([1.016199666777148,   0.043953600688565,  -0.114729547537933,   0.070089213834930,  -0.029738753389694,  -0.284151852739576,  -7.205475689979612])  # initial state
+s_goal = np.array([389.1737349773743, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0])  # goal state
 T = 10.0  # simulation time
 dt = 0.1  # sampling time
 animate = True  # flag for animation
