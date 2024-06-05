@@ -1,5 +1,5 @@
 """
-Code for AA 203 Final Project - Gregory Zin
+Code for AA 203 Final Project using iLQR - Gregory Zin
 
 Autonomous Systems Lab (ASL), Stanford University
 """
@@ -46,7 +46,7 @@ def linearize(f, s, u):
     return A, B
 
 
-def ilqr(f, s0, s_goal, N, Q, R, QN, eps=1e-3, max_iters=1000):
+def ilqr(f, s0, s_goal, N, Q, R, QN, eps=1e-3, max_iters=100):
     """Compute the iLQR set-point tracking solution.
 
     Arguments
@@ -133,7 +133,7 @@ def ilqr(f, s0, s_goal, N, Q, R, QN, eps=1e-3, max_iters=1000):
 
         for i in range(N):
             qk[i] = (s_bar[i].T @ Q - s_goal.T @ Q) #.T
-            rk[i] = (u_bar[i].T @ R) #.T
+            rk[i] = (np.abs(u_bar[i]).T @ R) #.T
 
         # linear coefficient
         qN = (s_bar[-1,:].T @ QN - s_goal.T @ QN) #.T
@@ -176,10 +176,10 @@ def ilqr(f, s0, s_goal, N, Q, R, QN, eps=1e-3, max_iters=1000):
         for k in range(N):
             # deviation variables
             ds[k] = s[k] - s_bar[k] 
-            du[k] = y[k] + Y[k] @ ds[k]
+            du[k] = jnp.mod( y[k] + Y[k] @ ds[k], 2*np.pi * np.sign(y[k] + Y[k] @ ds[k]) ) 
             
             # new state and control history with discretized dynamics
-            u[k] = u_bar[k] + du[k]
+            u[k] = jnp.mod( u_bar[k] + du[k], 2*np.pi * np.sign(u_bar[k] + du[k]) )
             s[k + 1] = f(s[k], u[k])
             
             
@@ -187,7 +187,7 @@ def ilqr(f, s0, s_goal, N, Q, R, QN, eps=1e-3, max_iters=1000):
         s_bar = np.copy(s)
         u_bar = np.copy(u) 
         # ds = s - s_bar
-        # print(ds[-1])
+        print(np.max(np.abs(du)))
 
         # raise NotImplementedError()
         #######################################################################
@@ -232,10 +232,10 @@ Q = np.diag(np.array([10.0, 10.0, 10.0, 1.0, 1.0, 1.0, 1.0]))  # state cost matr
 R = 1e-2 * np.eye(m)  # control cost matrix
 QN = 1e2 * np.eye(n)  # terminal state cost matrix
 s0 = np.array([1.016199666777148,   0.043953600688565,  -0.114729547537933,   0.070089213834930,  -0.029738753389694,  -0.284151852739576,  -7.205475689979612])  # initial state
-s_goal = np.array([a3, 0.0, 0.0, a3*(n3-1), 0.0, 0.0, -20*np.pi])  # goal state
+s_goal = np.array([a3, 0.0, 0.0, 0.0, a3*(n3-1), 0.0, -20*np.pi])  # goal state
 T = (s_goal[-1] - s0[-1])/(n3-1)  # simulation time
-dt = 0.01  # sampling time
-animate = True  # flag for animation
+dt = 0.1  # sampling time
+# animate = True  # flag for animation
 closed_loop = True  # flag for closed-loop control
 
 # Initialize continuous-time and discretized dynamics
@@ -261,14 +261,34 @@ for k in range(N):
     # INSTRUCTIONS: Compute either the closed-loop or open-loop value of
     # `u[k]`, depending on the Boolean flag `closed_loop`.
     if closed_loop:
-        u[k] = u_bar[k] + y[k] + Y[k] @ (s[k] - s_bar[k])
+        u[k] = jnp.mod( u_bar[k] + y[k] + Y[k] @ (s[k] - s_bar[k]), 2*np.pi * np.sign(u_bar[k] + y[k] + Y[k] @ (s[k] - s_bar[k])) )
         
     else:  # do open-loop control
-        u[k] = u_bar[k]
+        u[k] = jnp.mod( u_bar[k], 2*np.pi * np.sign(u_bar[k]) )
         
     ###########################################################################
     s[k + 1] = odeint(lambda s, t: f(s, u[k]), s[k], t[k : k + 2])[1]
 print("done! ({:.2f} s)".format(time.time() - start), flush=True)
+
+# Plot
+fig, axes = plt.subplots(3, 3, dpi=150, figsize=(10, 10))
+plt.subplots_adjust(wspace=0.45)
+labels_s = (r"$x(t)$", r"$y(t)$", r"$z(t)$", r"$\dot{x}(t)$", r"$\dot{y}(t)$", r"$\dot{z}(t)$", r"$\theta(t)$")
+labels_u = (r"$\alpha(t)$",r"$\beta(t)$")
+for i in range(n):
+    axes[int(np.floor(i/3)),np.mod(i,3)].plot(t, s[:, i])
+    axes[int(np.floor(i/3)),np.mod(i,3)].set_xlabel(r"$t$")
+    axes[int(np.floor(i/3)),np.mod(i,3)].set_ylabel(labels_s[i])
+for i in range(m):
+    axes[int(np.floor((n + i)/3)),np.mod(n + i,3)].plot(t[:-1], u[:, i])
+    axes[int(np.floor((n + i)/3)),np.mod(n + i,3)].set_xlabel(r"$t$")
+    axes[int(np.floor((n + i)/3)),np.mod(n + i,3)].set_ylabel(labels_u[i])
+if closed_loop:
+    plt.savefig("solarsail_cl.png", bbox_inches="tight")
+else:
+    plt.savefig("solarsail_ol.png", bbox_inches="tight")
+plt.show()
+
 
 # Plot
 # fig, axes = plt.subplots(1, n + m, dpi=150, figsize=(15, 2))
