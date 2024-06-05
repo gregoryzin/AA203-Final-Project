@@ -6,7 +6,7 @@ Autonomous Systems Lab (ASL), Stanford University
 
 import time
 
-from helper import *
+from project.helper import *
 
 import jax
 import jax.numpy as jnp
