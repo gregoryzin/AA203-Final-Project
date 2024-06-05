@@ -6,7 +6,7 @@ Autonomous Systems Lab (ASL), Stanford University
 
 import time
 
-from project.helper import *
+from helper import *
 
 import jax
 import jax.numpy as jnp
@@ -101,6 +101,9 @@ def ilqr(f, s0, s_goal, N, Q, R, QN, eps=1e-3, max_iters=1000):
     s_bar = np.zeros((N + 1, n))
     s_bar[0] = s0
     for k in range(N):
+        # use heuristic guess initial trajectory
+        u_bar[k] = np.array([-np.pi/4, 0])
+
         s_bar[k + 1] = f(s_bar[k], u_bar[k])
     ds = np.zeros((N + 1, n))
     du = np.zeros((N, m))
@@ -229,8 +232,8 @@ Q = np.diag(np.array([10.0, 10.0, 10.0, 1.0, 1.0, 1.0, 1.0]))  # state cost matr
 R = 1e-2 * np.eye(m)  # control cost matrix
 QN = 1e2 * np.eye(n)  # terminal state cost matrix
 s0 = np.array([1.016199666777148,   0.043953600688565,  -0.114729547537933,   0.070089213834930,  -0.029738753389694,  -0.284151852739576,  -7.205475689979612])  # initial state
-s_goal = np.array([389.1737349773743, 0.0, 0.0, 0.0, 0.0, 0.0, -500*np.pi])  # goal state
-T = (s_goal[7] - s0[7])/(n3-1)  # simulation time
+s_goal = np.array([a3, 0.0, 0.0, a3*(n3-1), 0.0, 0.0, -20*np.pi])  # goal state
+T = (s_goal[-1] - s0[-1])/(n3-1)  # simulation time
 dt = 0.01  # sampling time
 animate = True  # flag for animation
 closed_loop = True  # flag for closed-loop control

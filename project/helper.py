@@ -43,6 +43,30 @@ import numpy as np
 #     cosθ = 
 
 
+# gravitational parameters [km^3 s^-2]
+global mu_M, mu_E, mu_S
+mu_M = 4902.800118   # Moon
+mu_E = 398600.435507 # Earth
+mu_S = 1.32712440041279419e11 # Sun
+
+# BCP constants
+global mu, mu2, mu3, a3, n3, LU1, TU1, LU2, TU2
+
+mu3 = mu_S/(mu_E + mu_M) 
+a3 = 1.49598e8/384399.014
+n3 = jnp.sqrt((1 + mu3)/a3**3)
+
+# Earth-Moon characteristic parameters (BCP1 frame)
+mu = mu_M/(mu_E + mu_M) # Earth is primary, Moon is secondary body
+LU1 = 384399.014 # km
+TU1 = jnp.sqrt(LU1**3/(mu_E + mu_M)) # seconds
+
+# Sun-B1 characteristic parameters (BCP2 frame)
+mu2 = (mu_E + mu_M)/(mu_E + mu_M + mu_S) # treating Sun as primary and combined Earth-Moon as secondary body
+LU2 = 1.49598e8 # km
+TU2 = jnp.sqrt(LU2**3/(mu_E + mu_M + mu_S)) # seconds
+
+
 def BCR4BP_SRP(s,u):
     """Compute the state derivative in the BCR4BP with solar radiation pressure (SRP)."""
     # spacecraft sail model (single plate)
@@ -50,29 +74,6 @@ def BCR4BP_SRP(s,u):
     A = 345 # m^2
     R_diff = 0.5 
     R_spec = 0.5
-    
-    # gravitational parameters [km^3 s^-2]
-    global mu_M, mu_E, mu_S
-    mu_M = 4902.800118   # Moon
-    mu_E = 398600.435507 # Earth
-    mu_S = 1.32712440041279419e11 # Sun
-    
-    # BCP constants
-    global mu, mu2, mu3, a3, n3, LU1, TU1, LU2, TU2
-
-    mu3 = mu_S/(mu_E + mu_M) 
-    a3 = 1.49598e8/384399.014
-    n3 = jnp.sqrt((1 + mu3)/a3**3)
-
-    # Earth-Moon characteristic parameters (BCP1 frame)
-    mu = mu_M/(mu_E + mu_M) # Earth is primary, Moon is secondary body
-    LU1 = 384399.014 # km
-    TU1 = jnp.sqrt(LU1**3/(mu_E + mu_M)) # seconds
-
-    # Sun-B1 characteristic parameters (BCP2 frame)
-    mu2 = (mu_E + mu_M)/(mu_E + mu_M + mu_S) # treating Sun as primary and combined Earth-Moon as secondary body
-    LU2 = 1.49598e8 # km
-    TU2 = jnp.sqrt(LU2**3/(mu_E + mu_M + mu_S)) # seconds
 
     # call BCR4BP function dynamics
     ds = BCR4BP(s)
@@ -103,7 +104,7 @@ def BCR4BP_SRP(s,u):
     P = SRP(jnp.linalg.norm(R_SCI))
 
     # SRP force vector in SCI frame [N]
-    F_SCI = -P * A * (2*(R_diff/3 + R_spec*cosθ)*n_SCI + (1-R_spec)*-R_SCI/jnp.linalg.norm(R_SCI)) * jnp.max([cosθ,0])
+    F_SCI = -P * A * (2*(R_diff/3 + R_spec*cosθ)*n_SCI + (1-R_spec)*-R_SCI/jnp.linalg.norm(R_SCI)) * jnp.max(jnp.array([cosθ,0]))
 
     # acceleration due to SRP in SCI frame [m/s^2]
     a_SCI = F_SCI/m
