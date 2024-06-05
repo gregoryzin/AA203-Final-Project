@@ -6,7 +6,7 @@ Autonomous Systems Lab (ASL), Stanford University
 
 import time
 
-# from helper import ...
+from helper import *
 
 import jax
 import jax.numpy as jnp
@@ -225,18 +225,18 @@ def cartpole(s, u):
 # Define constants
 n = 7  # state dimension
 m = 2  # control dimension
-Q = np.diag(np.array([10.0, 10.0, 2.0, 2.0]))  # state cost matrix
+Q = np.diag(np.array([10.0, 10.0, 10.0, 1.0, 1.0, 1.0, 1.0]))  # state cost matrix
 R = 1e-2 * np.eye(m)  # control cost matrix
 QN = 1e2 * np.eye(n)  # terminal state cost matrix
 s0 = np.array([1.016199666777148,   0.043953600688565,  -0.114729547537933,   0.070089213834930,  -0.029738753389694,  -0.284151852739576,  -7.205475689979612])  # initial state
-s_goal = np.array([389.1737349773743, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0])  # goal state
-T = 10.0  # simulation time
-dt = 0.1  # sampling time
+s_goal = np.array([389.1737349773743, 0.0, 0.0, 0.0, 0.0, 0.0, -500*np.pi])  # goal state
+T = (s_goal[7] - s0[7])/(n3-1)  # simulation time
+dt = 0.01  # sampling time
 animate = True  # flag for animation
 closed_loop = True  # flag for closed-loop control
 
 # Initialize continuous-time and discretized dynamics
-f = jax.jit(cartpole)
+f = jax.jit(BCR4BP_SRP)
 fd = jax.jit(lambda s, u, dt=dt: s + dt * f(s, u))
 
 # Compute the iLQR solution with the discretized dynamics
@@ -268,25 +268,25 @@ for k in range(N):
 print("done! ({:.2f} s)".format(time.time() - start), flush=True)
 
 # Plot
-fig, axes = plt.subplots(1, n + m, dpi=150, figsize=(15, 2))
-plt.subplots_adjust(wspace=0.45)
-labels_s = (r"$x(t)$", r"$\theta(t)$", r"$\dot{x}(t)$", r"$\dot{\theta}(t)$")
-labels_u = (r"$u(t)$",)
-for i in range(n):
-    axes[i].plot(t, s[:, i])
-    axes[i].set_xlabel(r"$t$")
-    axes[i].set_ylabel(labels_s[i])
-for i in range(m):
-    axes[n + i].plot(t[:-1], u[:, i])
-    axes[n + i].set_xlabel(r"$t$")
-    axes[n + i].set_ylabel(labels_u[i])
-if closed_loop:
-    plt.savefig("cartpole_swingup_cl.png", bbox_inches="tight")
-else:
-    plt.savefig("cartpole_swingup_ol.png", bbox_inches="tight")
-plt.show()
+# fig, axes = plt.subplots(1, n + m, dpi=150, figsize=(15, 2))
+# plt.subplots_adjust(wspace=0.45)
+# labels_s = (r"$x(t)$", r"$\theta(t)$", r"$\dot{x}(t)$", r"$\dot{\theta}(t)$")
+# labels_u = (r"$u(t)$",)
+# for i in range(n):
+#     axes[i].plot(t, s[:, i])
+#     axes[i].set_xlabel(r"$t$")
+#     axes[i].set_ylabel(labels_s[i])
+# for i in range(m):
+#     axes[n + i].plot(t[:-1], u[:, i])
+#     axes[n + i].set_xlabel(r"$t$")
+#     axes[n + i].set_ylabel(labels_u[i])
+# if closed_loop:
+#     plt.savefig("cartpole_swingup_cl.png", bbox_inches="tight")
+# else:
+#     plt.savefig("cartpole_swingup_ol.png", bbox_inches="tight")
+# plt.show()
 
-if animate:
-    fig, ani = animate_cartpole(t, s[:, 0], s[:, 1])
-    ani.save("cartpole_swingup.mp4", writer="ffmpeg")
-    plt.show()
+# if animate:
+#     fig, ani = animate_cartpole(t, s[:, 0], s[:, 1])
+#     ani.save("cartpole_swingup.mp4", writer="ffmpeg")
+#     plt.show()

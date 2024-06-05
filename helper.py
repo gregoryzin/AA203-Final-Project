@@ -45,7 +45,11 @@ import numpy as np
 
 def BCR4BP_SRP(s,u):
     """Compute the state derivative in the BCR4BP with solar radiation pressure (SRP)."""
-
+    # spacecraft sail model (single plate)
+    m = 39000 # kg
+    A = 345 # m^2
+    R_diff = 0.5 
+    R_spec = 0.5
     
     # gravitational parameters [km^3 s^-2]
     global mu_M, mu_E, mu_S
@@ -69,12 +73,6 @@ def BCR4BP_SRP(s,u):
     mu2 = (mu_E + mu_M)/(mu_E + mu_M + mu_S) # treating Sun as primary and combined Earth-Moon as secondary body
     LU2 = 1.49598e8 # km
     TU2 = jnp.sqrt(LU2**3/(mu_E + mu_M + mu_S)) # seconds
-
-    # spacecraft sail model (single plate)
-    m = 39000 # kg
-    A = 345 # m^2
-    R_diff = 0.5 
-    R_spec = 0.5
 
     # call BCR4BP function dynamics
     ds = BCR4BP(s)
@@ -101,19 +99,30 @@ def BCR4BP_SRP(s,u):
     # cosine of angle between r_s and n_B
     cosθ = jnp.dot(-R_SCI/jnp.linalg.norm(R_SCI), n_SCI)
 
-    # solar radition pressure [N/m^2]
-    
+    # solar radiation pressure [N/m^2]
+    P = SRP(jnp.linalg.norm(R_SCI))
 
+    # SRP force vector in SCI frame [N]
+    F_SCI = -P * A * (2*(R_diff/3 + R_spec*cosθ)*n_SCI + (1-R_spec)*-R_SCI/jnp.linalg.norm(R_SCI)) * jnp.max([cosθ,0])
 
-    # add SRP acceleration to BCR4BP state derivative
+    # acceleration due to SRP in SCI frame [m/s^2]
+    a_SCI = F_SCI/m
+
+    # transform acceleration vector from SCI to BCP2 frame
+    t2, a2 = SCItoBCP2(t_SCI,a_SCI)
+
+    # transform acceleration vector from BCP2 to BCP1 frame
+    t1, a1 = BCP2toBCP1(t2,a2)
+
+    # nondimensionalize SRP acceleration and add to BCR4BP state derivative
     ds = jnp.array(
         [
             ds[0],
             ds[1],
             ds[2],
-            ds[3] ,
-            ds[4] ,
-            ds[5] ,
+            ds[3] + a1[0] * TU1**2/(LU1*1000),
+            ds[4] + a1[1] * TU1**2/(LU1*1000),
+            ds[5] + a1[2] * TU1**2/(LU1*1000),
             ds[6]
         ]
     )
@@ -190,12 +199,9 @@ def BCP1toBCP2(s):
     rvec1 = jnp.array([x, y, z])
     vvec1 = jnp.array([vx, vy, vz])
 
-    # assume that time t is linearly related to θ_S by equation: θ_S = (n3-1)*t
+    # assume that time T is linearly related to θ_S by equation: θ_S = (n3-1)*T
     # and that θ_S = 0 when t = 0
-    t = θ_S/(n3 - 1)
-
-    # convert to dimensional time
-    T = t*TU1
+    T = θ_S/(n3 - 1)
 
     # convert to nondimensional BCP2 time
     t2 = T/TU2
@@ -280,11 +286,11 @@ def BCP2toSCI(t2,s2):
 
     return T, S
 
-def SRP(r):
+def SRP(R):
     # This function computes the solar radiation pressure at given distance r 
     # from the Sun.
     # Input:
-    #   r - distance from the Sun in km
+    #   R - distance from the Sun in km
     # Output:
     #   P - solar pressure in Pascals (N/m^2)
     
@@ -293,9 +299,54 @@ def SRP(r):
     c = 299792458 # speed of light [m/s]
 
     # solar flux [W/m^2]
-    F = L/(4*np.pi*(1000*r)^2)
+    F = L/(4*np.pi*(1000*R)**2)
 
     # solar pressure [N/m^2]
     P = F/c
 
     return P
+
+def SCItoBCP2(T,a_SCI):
+    # This function transforms a vector from the SCI frame to the BCP2 frame
+
+    # nondimensionalized time
+    t2 = T/TU2
+
+    # mean motion is the inverse of TU2 [rad/sec]
+    n = 1/TU2
+
+    # rotation matrix from rotating to inertial frame
+    R = jnp.array([[jnp.cos(n*T), -jnp.sin(n*T), 0],
+                   [jnp.sin(n*T), jnp.cos(n*T), 0],
+                   [0, 0, 1]])
+    
+    # use transpose of R to convert from inertial to rotating frame
+    a2 = R.T @ a_SCI
+
+    return t2, a2
+
+def BCP2toBCP1(t2,a2):
+    # This function converts a vector from the BCP2 frame to the BCP1 frame
+
+    # transform time t2 to dimensional units
+    T = t2 * TU2
+
+    # transform T into nondimensional BCP1 time units
+    t1 = T / TU1
+
+    # assume that time T is linearly related to θ_S to get angle of the Sun 
+    θ_S = (n3-1)*T # rad
+
+    # angle of the Moon in BCP2
+    θ_M = np.pi - θ_S # rad
+    sinθ_M, cosθ_M = jnp.sin(θ_M), jnp.cos(θ_M)
+
+    # rotation matrix from BCP1 to BCP2
+    C = jnp.array([[cosθ_M, -sinθ_M, 0],
+          [sinθ_M, cosθ_M, 0],
+          [0, 0, 1]])
+    
+    # apply transpose of C to go from BCP2 to BCP1
+    a1 = C.T @ a2
+
+    return t1, a1
