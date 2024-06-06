@@ -70,7 +70,7 @@ TU2 = jnp.sqrt(LU2**3/(mu_E + mu_M + mu_S)) # seconds
 def BCR4BP_SRP(s,u):
     """Compute the state derivative in the BCR4BP with solar radiation pressure (SRP)."""
     # spacecraft sail model (single plate)
-    m = 39000 # kg
+    m = 390 # kg
     A = 345 # m^2
     R_diff = 0.5 
     R_spec = 0.5
@@ -94,17 +94,25 @@ def BCR4BP_SRP(s,u):
     α, β = u
     sinπα, cosπα, sinβ, cosβ = jnp.sin(np.pi+α), jnp.cos(np.pi+α), jnp.sin(β), jnp.cos(β)
 
-    # flat plate unit normal vector in SCI frame
-    n_SCI = jnp.array([cosπα*cosβ, sinπα*cosβ, sinβ])
+    # flat plate unit normal vector in RTN frame
+    n_RTN = jnp.array([cosπα*cosβ, sinπα*cosβ, sinβ])
+
+    # convert from RTN frame to SCI frame
+    n_SCI = RTNtoSCI(R_SCI,T_SCI,N_SCI) @ n_RTN
+
+    # include back side of plate
+    n_back = -1*jnp.copy(n_SCI)
 
     # cosine of angle between r_s and n_B
     cosθ = jnp.dot(-R_SCI/jnp.linalg.norm(R_SCI), n_SCI)
+    cosθ_b = jnp.dot(-R_SCI/jnp.linalg.norm(R_SCI), n_back)
 
     # solar radiation pressure [N/m^2]
     P = SRP(jnp.linalg.norm(R_SCI))
 
     # SRP force vector in SCI frame [N]
-    F_SCI = -P * A * (2*(R_diff/3 + R_spec*cosθ)*n_SCI + (1-R_spec)*-R_SCI/jnp.linalg.norm(R_SCI)) * jnp.max(jnp.array([cosθ,0]))
+    F_SCI = -P * A * (2*(R_diff/3 + R_spec*cosθ)*n_SCI + (1-R_spec)*-R_SCI/jnp.linalg.norm(R_SCI)) * jnp.max(jnp.array([cosθ,0])) \
+            -P * A * (2*(R_diff/3 + R_spec*cosθ_b)*n_back + (1-R_spec)*-R_SCI/jnp.linalg.norm(R_SCI)) * jnp.max(jnp.array([cosθ_b,0]))
 
     # acceleration due to SRP in SCI frame [m/s^2]
     a_SCI = F_SCI/m
@@ -351,3 +359,18 @@ def BCP2toBCP1(t2,a2):
     a1 = C.T @ a2
 
     return t1, a1
+
+def RTNtoSCI(R_SCI,T_SCI,N_SCI):
+    # RTN vectors defined in SCI frame
+
+    # normalize the vectors
+    R_hat = R_SCI/jnp.linalg.norm(R_SCI)
+    T_hat = T_SCI/jnp.linalg.norm(T_SCI)
+    N_hat = N_SCI/jnp.linalg.norm(N_SCI)
+
+    # assemble rotation matrix
+    R = jnp.array([[R_hat[0], T_hat[0], N_hat[0]],
+        [R_hat[1], T_hat[1], N_hat[1]],
+        [R_hat[2], T_hat[2], N_hat[2]]])
+    
+    return R
