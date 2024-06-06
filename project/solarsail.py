@@ -133,7 +133,7 @@ def ilqr(f, s0, s_goal, N, Q, R, QN, eps=1e-3, max_iters=100):
 
         for i in range(N):
             qk[i] = (s_bar[i].T @ Q - s_goal.T @ Q) #.T
-            rk[i] = (np.abs(u_bar[i]).T @ R) #.T
+            rk[i] = (u_bar[i].T @ R) #.T
 
         # linear coefficient
         qN = (s_bar[-1,:].T @ QN - s_goal.T @ QN) #.T
@@ -176,10 +176,10 @@ def ilqr(f, s0, s_goal, N, Q, R, QN, eps=1e-3, max_iters=100):
         for k in range(N):
             # deviation variables
             ds[k] = s[k] - s_bar[k] 
-            du[k] = jnp.mod( y[k] + Y[k] @ ds[k], 2*np.pi * np.sign(y[k] + Y[k] @ ds[k]) ) 
+            du[k] = y[k] + Y[k] @ ds[k] # jnp.mod( y[k] + Y[k] @ ds[k], 2*np.pi ) 
             
             # new state and control history with discretized dynamics
-            u[k] = jnp.mod( u_bar[k] + du[k], 2*np.pi * np.sign(u_bar[k] + du[k]) )
+            u[k] = u_bar[k] + du[k] # jnp.mod( u_bar[k] + du[k], 2*np.pi * np.sign(u_bar[k] + du[k]) )
             s[k + 1] = f(s[k], u[k])
             
             
@@ -202,39 +202,39 @@ def ilqr(f, s0, s_goal, N, Q, R, QN, eps=1e-3, max_iters=100):
     return s_bar, u_bar, Y, y
 
 
-def cartpole(s, u):
-    """Compute the cart-pole state derivative."""
-    mp = 2.0  # pendulum mass
-    mc = 10.0  # cart mass
-    L = 1.0  # pendulum length
-    g = 9.81  # gravitational acceleration
+# def cartpole(s, u):
+#     """Compute the cart-pole state derivative."""
+#     mp = 2.0  # pendulum mass
+#     mc = 10.0  # cart mass
+#     L = 1.0  # pendulum length
+#     g = 9.81  # gravitational acceleration
 
-    x, θ, dx, dθ = s
-    sinθ, cosθ = jnp.sin(θ), jnp.cos(θ)
-    h = mc + mp * (sinθ**2)
-    ds = jnp.array(
-        [
-            dx,
-            dθ,
-            (mp * sinθ * (L * (dθ**2) + g * cosθ) + u[0]) / h,
-            -((mc + mp) * g * sinθ + mp * L * (dθ**2) * sinθ * cosθ + u[0] * cosθ)
-            / (h * L),
-        ]
-    )
-    return ds
+#     x, θ, dx, dθ = s
+#     sinθ, cosθ = jnp.sin(θ), jnp.cos(θ)
+#     h = mc + mp * (sinθ**2)
+#     ds = jnp.array(
+#         [
+#             dx,
+#             dθ,
+#             (mp * sinθ * (L * (dθ**2) + g * cosθ) + u[0]) / h,
+#             -((mc + mp) * g * sinθ + mp * L * (dθ**2) * sinθ * cosθ + u[0] * cosθ)
+#             / (h * L),
+#         ]
+#     )
+#     return ds
 
 
 
 # Define constants
 n = 7  # state dimension
 m = 2  # control dimension
-Q = np.diag(np.array([10.0, 10.0, 10.0, 1.0, 1.0, 1.0, 1.0]))  # state cost matrix
+Q = np.diag(np.array([10.0, 10.0, 10.0, 0.0, 0.0, 0.0, 0.0]))  # state cost matrix
 R = 1e-2 * np.eye(m)  # control cost matrix
-QN = 1e2 * np.eye(n)  # terminal state cost matrix
+QN = np.diag(np.array([100.0, 100.0, 100.0, 0.0, 0.0, 0.0, 0.0]))  # terminal state cost matrix
 s0 = np.array([1.016199666777148,   0.043953600688565,  -0.114729547537933,   0.070089213834930,  -0.029738753389694,  -0.284151852739576,  -7.205475689979612])  # initial state
-s_goal = np.array([a3, 0.0, 0.0, 0.0, a3*(n3-1), 0.0, -20*np.pi])  # goal state
+s_goal = np.array([a3, 0.0, 0.0, 0.0, a3*(n3-1), 0.0, -200*np.pi])  # goal state
 T = (s_goal[-1] - s0[-1])/(n3-1)  # simulation time
-dt = 0.1  # sampling time
+dt = 0.01  # sampling time
 # animate = True  # flag for animation
 closed_loop = True  # flag for closed-loop control
 

@@ -282,10 +282,7 @@ for i in range(m):
     axes[int(np.floor((n + i)/3)),np.mod(n + i,3)].plot(t[:-1], u[:, i])
     axes[int(np.floor((n + i)/3)),np.mod(n + i,3)].set_xlabel(r"$t$")
     axes[int(np.floor((n + i)/3)),np.mod(n + i,3)].set_ylabel(labels_u[i])
-if closed_loop:
-    plt.savefig("solarsail_cl.png", bbox_inches="tight")
-else:
-    plt.savefig("solarsail_ol.png", bbox_inches="tight")
+plt.savefig("solarsail_SCP.png", bbox_inches="tight")
 plt.show()
 
 # Plot cost history over SCP iterations
