@@ -204,28 +204,6 @@ def scp_iteration(f, s0, s_goal, s_prev, u_prev, N, P, Q, R, u_max, ρ):
     return s, u, J
 
 
-def cartpole(s, u):
-    """Compute the cart-pole state derivative."""
-    mp = 1.0  # pendulum mass
-    mc = 4.0  # cart mass
-    L = 1.0  # pendulum length
-    g = 9.81  # gravitational acceleration
-
-    x, θ, dx, dθ = s
-    sinθ, cosθ = jnp.sin(θ), jnp.cos(θ)
-    h = mc + mp * (sinθ**2)
-    ds = jnp.array(
-        [
-            dx,
-            dθ,
-            (mp * sinθ * (L * (dθ**2) + g * cosθ) + u[0]) / h,
-            -((mc + mp) * g * sinθ + mp * L * (dθ**2) * sinθ * cosθ + u[0] * cosθ)
-            / (h * L),
-        ]
-    )
-    return ds
-
-
 def discretize(f, dt):
     """Discretize continuous-time dynamics `f` via Runge-Kutta integration."""
 
@@ -237,7 +215,6 @@ def discretize(f, dt):
         return s + (k1 + 2 * k2 + 2 * k3 + k4) / 6
 
     return integrator
-
 
 
 # Define constants
